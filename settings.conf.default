@@ -2,9 +2,9 @@
 
 [general]
 # Version
-version=2.0.2
+version=2.1.1
 # Rtkbase upgrade mandatory "checkpoint"
-checkpoint_version=2.1.0
+checkpoint_version=2.2.0
 # User who runs str2str_file service
 user=
 # NTRIP caster program
@@ -23,7 +23,7 @@ maptiler_key=
 
 [main]
 #base coordinates: lat long height
-position='47.034 -1.251 36.4'
+position='47.0983869 -1.2655108 36.4'
 #gnss receiver com port
 com_port='ttyS1'
 #gnss receiver com port settings
@@ -50,7 +50,7 @@ file_overlap_time='30'
 #name for the compressed archive
 archive_name=$(date -d "-1 days" +"%Y-%m-%d_%S").zip
 #archives older than this value (in days) will be deleted by archive_and_clean.sh
-archive_rotate='90'
+archive_rotate='60'
 
 [ntrip]
 
@@ -64,8 +64,9 @@ svr_port='2101'
 svr_pwd=''
 #Mount name
 mnt_name='Your_mount_name'
-
 rtcm_msg='1004,1005,1006,1012,1019,1020,1042,1045,1046,1077,1087,1097,1107,1127,1230'
+#Receiver dependent options
+ntrip_receiver_options=''
 
 [rtcm_svr]
 
@@ -75,7 +76,8 @@ rtcm_msg='1004,1005,1006,1012,1019,1020,1042,1045,1046,1077,1087,1097,1107,1127,
 rtcm_svr_port='5016'
 #messages for rtcm local use
 rtcm_svr_msg='1004,1005,1006,1012,1019,1020,1042,1045,1046,1077,1087,1097,1107,1127,1230'
-
+#Receiver dependent options
+rtcm_receiver_options=''
 
 [log]
 
