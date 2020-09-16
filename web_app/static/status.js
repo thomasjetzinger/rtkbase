@@ -47,16 +47,49 @@ $(document).ready(function () {
 
     var map = L.map('map').setView({lon: 0, lat: 0}, 2);
 
-    L.tileLayer('https://osm.vtech.fr/hot/{z}/{x}/{y}.png?uuid=2fc148f4-7018-4fd0-ac34-6b626cdc97a1', {
+    var osmLayer = L.tileLayer('https://osm.vtech.fr/hot/{z}/{x}/{y}.png?uuid=2fc148f4-7018-4fd0-ac34-6b626cdc97a1', {
         maxZoom: 20,
-        attribution: '&copy; <a href="https://openstreetmap.org/copyright">OpenStreetMap contributors</a> ' +
-            '<a href="https://creativecommons.org/licenses/by-sa/2.0/">CC-BY-SA</a> ' +
-            '| <a href="https://cloud.empreintedigitale.fr">Empreinte digitale</a>',
+        attribution: '&copy; <a href="https://openstreetmap.org/copyright" target="_blank">OpenStreetMap contributors</a> ' +
+            '| <a href="https://cloud.empreintedigitale.fr" target="_blank">Empreinte digitale</a>',
         tileSize: 256,
         
-    }).addTo(map);
+    });
 
-    // Add marker
+    if (maptiler_key.length > 0) {
+    var aerialLayer = L.tileLayer('https://api.maptiler.com/maps/hybrid/{z}/{x}/{y}.jpg?key=' + maptiler_key,{
+        tileSize: 512,
+        zoomOffset: -1,
+        minZoom: 1,
+        maxZoom: 20,
+        attribution: '<a href="https://www.maptiler.com/copyright/" target="_blank">© MapTiler</a> <a href="https://www.openstreetmap.org/copyright" target="_blank">© OpenStreetMap contributors</a>',
+        crossOrigin: true
+      });
+    };
+    
+    var baseMaps = {
+        "OpenStreetMap": osmLayer
+    };
+
+    if (typeof(aerialLayer) !== 'undefined') {
+        baseMaps["Aerial_Hybrid"] = aerialLayer;
+    };
+    console.log("basemap après if" + baseMaps);
+    console.log
+    L.control.layers(baseMaps).addTo(map);
+    osmLayer.addTo(map);
+    
+    // Add Base station crosshair
+    var crossIcon = L.icon({
+        iconUrl: '/static/images/iconmonstr-crosshair-6-64.png',
+        iconSize: [24, 24],
+        iconAnchor: [12, 12],
+            });
+    
+    
+    //the baseCoordinates variable comes from status.html
+    var baseMark = L.marker(baseCoordinates, {icon: crossIcon, zIndexOffset: 0}).addTo(map);
+
+    // Add realtime localisation marker
     var locMark = L.marker({lng: 0, lat: 0}).addTo(map);
 
     // Move map view with marker location

@@ -74,9 +74,9 @@ install_gpsd_chrony() {
       #Adding GPS as source for chrony
       grep -q 'set larger delay to allow the GPS' /etc/chrony/chrony.conf || echo '# set larger delay to allow the GPS source to overlap with the other sources and avoid the falseticker status
 ' >> /etc/chrony/chrony.conf
-      grep -qxF 'refclock SHM 0 refid GPS precision 1e-1 offset 0 delay 0.2' /etc/chrony/chrony.conf || echo 'refclock SHM 0 refid GPS precision 1e-1 offset 0 delay 0.2' >> /etc/chrony/chrony.conf
+      grep -qxF 'refclock SHM 0 refid GNSS precision 1e-1 offset 0 delay 0.2' /etc/chrony/chrony.conf || echo 'refclock SHM 0 refid GNSS precision 1e-1 offset 0 delay 0.2' >> /etc/chrony/chrony.conf
       #Adding PPS as an optionnal source for chrony
-      grep -q 'refclock PPS /dev/pps0 refid PPS lock GPS' /etc/chrony/chrony.conf || echo '#refclock PPS /dev/pps0 refid PPS lock GPS' >> /etc/chrony/chrony.conf
+      grep -q 'refclock PPS /dev/pps0 refid PPS lock GNSS' /etc/chrony/chrony.conf || echo '#refclock PPS /dev/pps0 refid PPS lock GNSS' >> /etc/chrony/chrony.conf
 
       #Overriding chrony.service with custom dependency
       cp /lib/systemd/system/chrony.service /etc/systemd/system/chrony.service
@@ -102,7 +102,7 @@ install_gpsd_chrony() {
       #Setting correct input for gpsd
       sed -i 's/^DEVICES=.*/DEVICES="tcp:\/\/127.0.0.1:5015"/' /etc/default/gpsd
       #Adding example for using pps
-      sed -i '/^DEVICES=.*/a #DEVICES="tcp:\/\/127.0.0.1:5015 \/dev\/pps0"' /etc/default/gpsd
+      grep -q 'DEVICES="tcp:/120.0.0.1:5015 /dev/pps0' /etc/default/gpsd || sed -i '/^DEVICES=.*/a #DEVICES="tcp:\/\/127.0.0.1:5015 \/dev\/pps0"' /etc/default/gpsd
       #gpsd should always run, in read only mode
       sed -i 's/^GPSD_OPTIONS=.*/GPSD_OPTIONS="-n -b"/' /etc/default/gpsd
       #Overriding gpsd.service with custom dependency
@@ -154,6 +154,7 @@ rtkbase_repo(){
     #Get rtkbase repository
     sudo -u $(logname) git clone https://github.com/stefal/rtkbase.git
     sudo -u $(logname) touch rtkbase/settings.conf
+    add_rtkbase_path_to_environment
 
 }
 
@@ -162,6 +163,7 @@ rtkbase_release(){
     sudo -u $(logname) wget https://github.com/stefal/rtkbase/releases/latest/download/rtkbase.tar.gz -O rtkbase.tar.gz
     sudo -u $(logname) tar -xvf rtkbase.tar.gz
     sudo -u $(logname) touch rtkbase/settings.conf
+    add_rtkbase_path_to_environment
 
 }
 
@@ -169,15 +171,15 @@ install_rtkbase_from_repo() {
     echo '################################'
     echo 'INSTALLING RTKBASE FROM REPO'
     echo '################################'
-      if [ -d rtkbase ]
+      if [ -d ${rtkbase_path} ]
       then
-        if [ -d rtkbase/.git ]
+        if [ -d ${rtkbase_path}/.git ]
         then
           echo "RtkBase repo: YES, git pull"
-          git -C rtkbase pull
+          git -C ${rtkbase_path} pull
         else
           echo "RtkBase repo: NO, rm release & git clone rtkbase"
-          rm -r rtkbase
+          rm -r ${rtkbase_path}
           rtkbase_repo
         fi
       else
@@ -190,12 +192,12 @@ install_rtkbase_from_release() {
     echo '################################'
     echo 'INSTALLING RTKBASE FROM RELEASE'
     echo '################################'
-      if [ -d rtkbase ]
+      if [ -d ${rtkbase_path} ]
       then
-        if [ -d rtkbase/.git ]
+        if [ -d ${rtkbase_path}/.git ]
         then
           echo "RtkBase release: NO, rm repo & download last release"
-          rm -r rtkbase
+          rm -r ${rtkbase_path}
           rtkbase_release
         else
           echo "RtkBase release: YES, rm & deploy last release"
@@ -207,6 +209,24 @@ install_rtkbase_from_release() {
       fi
 }
 
+add_rtkbase_path_to_environment(){
+    echo '################################'
+    echo 'ADDING RTKBASE PATH TO ENVIRONMENT'
+    echo '################################'
+    if [ -d rtkbase ]
+      then
+        if grep -q '^rtkbase_path=' /etc/environment
+          then
+            #Change the path using @ as separator because / is present in $(pwd) output
+            sed -i "s@^rtkbase_path=.*@rtkbase_path=$(pwd)\/rtkbase@" /etc/environment
+          else
+            #Add the path
+            echo "rtkbase_path=$(pwd)/rtkbase" >> /etc/environment
+        fi
+    fi
+    export rtkbase_path=$(pwd)/rtkbase
+}
+
 rtkbase_requirements(){
     echo '################################'
     echo 'INSTALLING RTKBASE REQUIREMENTS'
@@ -214,10 +234,10 @@ rtkbase_requirements(){
       #as we need to run the web server as root, we need to install the requirements with
       #the same user
       python3 -m pip install --upgrade pip setuptools wheel  --extra-index-url https://www.piwheels.org/simple
-      python3 -m pip install -r rtkbase/web_app/requirements.txt  --extra-index-url https://www.piwheels.org/simple
+      python3 -m pip install -r ${rtkbase_path}/web_app/requirements.txt  --extra-index-url https://www.piwheels.org/simple
       # We were waiting for the next pystemd official release.
       # install pystemd dev wheel for arm platform
-      python3 -m pip install rtkbase/tools/pystemd-0.8.1590398158-cp37-cp37m-linux_armv7l.whl
+      uname -m | grep -q 'arm' || return 0 && python3 -m pip install ${rtkbase_path}/tools/pystemd-0.8.1590398158-cp37-cp37m-linux_armv7l.whl
       #when we will be able to launch the web server without root, we will use
       #sudo -u $(logname) python3 -m pip install -r requirements.txt --user.
 }
@@ -226,13 +246,15 @@ install_unit_files() {
     echo '################################'
     echo 'ADDING UNIT FILES'
     echo '################################'
-      if [ -d rtkbase ]
+      if [ -d ${rtkbase_path} ]
       then 
         #Install unit files
-        rtkbase/copy_unit.sh
+        ${rtkbase_path}/copy_unit.sh
         systemctl enable rtkbase_web.service
         systemctl enable rtkbase_archive.timer
         systemctl daemon-reload
+        #Add dialout group to user
+        usermod -a -G dialout $(logname)
       else
         echo 'RtkBase not installed, use option --rtkbase-release'
       fi
@@ -263,7 +285,7 @@ configure_gnss(){
     echo '################################'
     echo 'CONFIGURE GNSS RECEIVER'
     echo '################################'
-      if [ -d rtkbase ]
+      if [ -d ${rtkbase_path} ]
       then 
         if [[ ${#detected_gnss[*]} -eq 2 ]]
         then
@@ -272,20 +294,27 @@ configure_gnss(){
           then
             gnss_format='ubx'
           fi
-          if [[ -f "rtkbase/settings.conf" ]]  && grep -E "^com_port=.*" rtkbase/settings.conf #check if settings.conf exists
+          if [[ -f "${rtkbase_path}/settings.conf" ]]  && grep -E "^com_port=.*" ${rtkbase_path}/settings.conf #check if settings.conf exists
           then
             #change the com port value inside settings.conf
-            sudo -u $(logname) sed -i s/^com_port=.*/com_port=\'${detected_gnss[0]}\'/ rtkbase/settings.conf
+            sudo -u $(logname) sed -i s/^com_port=.*/com_port=\'${detected_gnss[0]}\'/ ${rtkbase_path}/settings.conf
+            #add option -TADJ=1 on rtcm/ntrip outputs
+            sudo -u $(logname) sed -i s/^ntrip_receiver_options=.*/ntrip_receiver_options=\'-TADJ=1\'/ ${rtkbase_path}/settings.conf
+            sudo -u $(logname) sed -i s/^rtcm_receiver_options=.*/rtcm_receiver_options=\'-TADJ=1\'/ ${rtkbase_path}/settings.conf
+
           else
             #create settings.conf with the com_port setting and the settings needed to start str2str_tcp
             #as it could start before the web server merge settings.conf.default and settings.conf
-            sudo -u $(logname) printf "[main]\ncom_port='"${detected_gnss[0]}"'\ncom_port_settings='115200:8:n:1'\nreceiver_format='"${gnss_format}"'\ntcp_port='5015'\n" > rtkbase/settings.conf
+            sudo -u $(logname) printf "[main]\ncom_port='"${detected_gnss[0]}"'\ncom_port_settings='115200:8:n:1'\nreceiver_format='"${gnss_format}"'\ntcp_port='5015'\n" > ${rtkbase_path}/settings.conf
+            #add option -TADJ=1 on rtcm/ntrip outputs
+            sudo -u $(logname) printf "[ntrip]\nntrip_receiver_options='-TADJ=1'\n[rtcm_svr]\nrtcm_receiver_options='-TADJ=1'\n" >> ${rtkbase_path}/settings.conf
+
           fi
         fi
         #if the receiver is a U-Blox, launch the set_zed-f9p.sh. This script will reset the F9P and configure it with the corrects settings for rtkbase
         if [[ ${detected_gnss[1]} =~ 'u-blox' ]]
         then
-          rtkbase/tools/set_zed-f9p.sh /dev/${detected_gnss[0]} 115200 rtkbase/receiver_cfg/U-Blox_ZED-F9P_rtkbase.txt
+          ${rtkbase_path}/tools/set_zed-f9p.sh /dev/${detected_gnss[0]} 115200 ${rtkbase_path}/receiver_cfg/U-Blox_ZED-F9P_rtkbase.cfg
         fi
       else
         echo 'RtkBase not installed, use option --rtkbase-release'
@@ -305,7 +334,11 @@ start_services() {
   echo '################################'
   echo 'END OF INSTALLATION'
   echo 'You can open your browser to http://'$(hostname -I)
+  #If the user isn't already in dialout group, a reboot is 
+  #mandatory to be able to access /dev/tty*
+  groups $(logname) | grep -q "dialout" || echo "But first, Please REBOOT!!!"
   echo '################################'
+  
 }
 main() {
   #display parameters
@@ -313,6 +346,24 @@ main() {
   array=($@)
   # if no parameters display help
   if [ -z "$array" ]                  ; then man_help                        ;fi
+  # If rtkbase is installed but the OS wasn't restarted, then the system wide
+  # rtkbase_path variable is not set in the current shell. We must source it
+  # from /etc/environment or set it to the default value "rtkbase":
+  if [[ -z ${rtkbase_path} ]]
+  then
+    if grep -q '^rtkbase_path=' /etc/environment
+    then
+      source /etc/environment
+    else 
+      export rtkbase_path='rtkbase'
+    fi
+  fi
+  # check if logname return an empty value
+  if [[ -z $(logname) ]]
+  then
+    echo 'The logname command return an empty value. Please reboot and retry.'
+    exit 1
+  fi
   # run intall options
   for i in "${array[@]}"
   do
@@ -329,14 +380,14 @@ main() {
     if [ "$i" == "--configure-gnss" ] ; then configure_gnss                  ;fi
     if [ "$i" == "--start-services" ] ; then start_services                  ;fi
     if [ "$i" == "--all" ]            ; then install_dependencies         && \
-					     install_rtklib               && \
-					     install_rtkbase_from_release && \
-					     rtkbase_requirements         && \
-					     install_unit_files           && \
-					     install_gpsd_chrony          && \
-					     detect_usb_gnss              && \
-					     configure_gnss               && \
-               start_services               ;fi
+                                      	     install_rtklib               && \
+                                      	     install_rtkbase_from_release && \
+                                      	     rtkbase_requirements         && \
+                                      	     install_unit_files           && \
+                                      	     install_gpsd_chrony          && \
+                                      	     detect_usb_gnss              && \
+                                      	     configure_gnss               && \
+                                      	     start_services                  ;fi
   done
 }
 
