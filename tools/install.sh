@@ -134,7 +134,7 @@ install_rtklib() {
       then 
         rm -rf RTKLIB/
         #Get Rtklib 2.4.3 repository
-        sudo -u $(logname) git clone -b rtklib_2.4.3 --single-branch https://github.com/tomojitakasu/RTKLIB
+        sudo -u $(logname) git clone -b rtklib_2.4.3 --single-branch https://github.com/thomasjetzinger/RTKLIB
         #Install Rtklib app
         #TODO add correct CTARGET in makefile?
         make --directory=RTKLIB/app/str2str/gcc
